@@ -1,0 +1,61 @@
+name: Sync & Build ARMv7
+
+on:
+  workflow_dispatch: # 允许手动点按钮触发
+
+permissions:
+  contents: write # ⚠️ 重要：给予 Action 推送代码的权限
+
+jobs:
+  sync-and-build:
+    name: Sync Upstream and Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: main         # 显式指定检出 main 分支
+        fetch-depth: 0    # 必须拉取完整历史，否则无法进行 merge 操作
+
+    - name: Sync with Upstream
+      id: sync
+      run: |
+        # 1. 配置 Git 用户信息（用于提交记录）
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        
+        # 2. 添加上游仓库地址
+        git remote add upstream https://github.com/router-for-me/CLIProxyAPI.git
+        git fetch upstream
+
+        # 3. 尝试合并上游的主分支（假设上游主分支为 main，如果是 master 请自行修改）
+        # 使用 --no-edit 使用默认合并信息，允许不相关的历史以防万一
+        git merge upstream/main --no-edit
+        
+        # 4. 推送变更回你的 Fork 仓库
+        git push origin main
+        
+        echo "Sync complete."
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21' 
+
+    - name: Build Binary
+      env:
+        GOOS: linux
+        GOARCH: arm
+        GOARM: 7
+        CGO_ENABLED: 0 
+      run: |
+        # 编译刚刚同步下来的最新代码
+        go build -v -o cli-proxy-api-armv7 ./cmd/server
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cli-proxy-api-armv7
+        path: cli-proxy-api-armv7
+        if-no-files-found: error
